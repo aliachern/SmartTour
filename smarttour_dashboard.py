@@ -1,86 +1,51 @@
-# streamlit_app.py
 import streamlit as st
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.decomposition import TruncatedSVD
-import hashlib
+from model.recommender import preprocess_data, build_cosine_model, build_svd_model
+from utils.auth import create_user_table, add_user, login_user
 
-# Load data
-df = pd.read_excel("SmartTourMalaysia_Attractions.xlsx")
-df['combined_features'] = df['state'] + " " + df['category'] + " " + df['description']
-
-# Vectorize and compute similarities
-vectorizer = TfidfVectorizer(stop_words='english')
-tfidf_matrix = vectorizer.fit_transform(df['combined_features'])
-cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-
-# Dummy user database
-users = {}
-
-# Tabs
 st.set_page_config(page_title="SmartTour Malaysia", layout="wide")
-tabs = st.tabs(["Home", "Recommendation", "Rate Destinations"])
+st.title("SmartTour Malaysia 🇲🇾")
 
-# User auth functions
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+create_user_table()
 
-def signup(username, password):
-    if username in users:
-        return False
-    users[username] = hash_password(password)
-    return True
+menu = ["Login", "Sign Up"]
+choice = st.sidebar.selectbox("Menu", menu)
 
-def login(username, password):
-    return users.get(username) == hash_password(password)
-
-# Home Tab
-with tabs[0]:
-    st.title("SmartTour Malaysia")
-    st.write("Welcome to your personalized AI travel guide.")
-
-    st.subheader("Log In")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type='password')
-    if st.button("Log In"):
-        if login(username, password):
-            st.success("Logged in successfully!")
-        else:
-            st.error("Invalid credentials.")
-
-    st.subheader("Sign Up")
-    new_username = st.text_input("New Username")
-    new_password = st.text_input("New Password", type='password')
+if choice == "Sign Up":
+    st.subheader("Create New Account")
+    new_user = st.text_input("Username")
+    new_password = st.text_input("Password", type="password")
     if st.button("Sign Up"):
-        if signup(new_username, new_password):
-            st.success("Account created!")
+        add_user(new_user, new_password)
+        st.success("Account created successfully!")
+
+elif choice == "Login":
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if login_user(username, password):
+            st.success(f"Welcome {username}")
+            tab1, tab2, tab3 = st.tabs(["🏠 Home", "🎯 Recommendations", "⭐ Ratings"])
+
+            with tab1:
+                st.markdown("Welcome to SmartTour Malaysia! Select your preferences and get tailored travel suggestions.")
+
+            with tab2:
+                st.markdown("### Get Travel Recommendations")
+                state = st.selectbox("Select State", ['kuala lumpur', 'kedah', 'melaka'])
+                category = st.selectbox("Select Category", ['beach', 'historical', 'nature', 'adventure', 'city'])
+
+                df = preprocess_data("data/SmartTourMalaysia_Attractions.xlsx")
+                filtered = df[(df['state'] == state) & (df['category'] == category)]
+
+                if filtered.empty:
+                    st.warning("No results found. Try different filters.")
+                else:
+                    st.dataframe(filtered[['place_name', 'category', 'avg_rating']].sort_values(by='avg_rating', ascending=False))
+
+            with tab3:
+                st.markdown("Rate your visited destinations (future enhancement)")
         else:
-            st.error("Username already exists.")
+            st.error("Incorrect Username or Password")
 
-# Recommendation Tab
-with tabs[1]:
-    st.header("Find Your Destination")
-    selected_state = st.selectbox("Choose a state", df['state'].unique())
-    selected_category = st.selectbox("Choose a category", df['category'].unique())
-
-    query = selected_state + " " + selected_category
-    query_vector = vectorizer.transform([query])
-    scores = cosine_similarity(query_vector, tfidf_matrix).flatten()
-    top_indices = scores.argsort()[::-1][:5]
-
-    st.subheader("Recommended Destinations")
-    for i in top_indices:
-        st.markdown(f"**{df.iloc[i]['name']}**")
-        st.write(f"State: {df.iloc[i]['state']} | Category: {df.iloc[i]['category']}")
-        st.write(f"Description: {df.iloc[i]['description']}")
-        st.write(f"Rating: {df.iloc[i]['avg_rating']}")
-        st.markdown("---")
-
-# Rating Tab
-with tabs[2]:
-    st.header("Rate Destinations")
-    selected_dest = st.selectbox("Choose a destination", df['name'])
-    rating = st.slider("Your Rating", 1, 5, 3)
-    if st.button("Submit Rating"):
-        st.success(f"Thank you for rating {selected_dest} with {rating} stars!")
