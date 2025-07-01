@@ -1,0 +1,27 @@
+import sqlite3
+import hashlib
+
+def create_user_table():
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS user (
+                 username TEXT, password TEXT)''')
+    conn.commit()
+    conn.close()
+
+def add_user(username, password):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    hashed_pw = hashlib.sha256(password.encode()).hexdigest()
+    c.execute('INSERT INTO user (username, password) VALUES (?, ?)', (username, hashed_pw))
+    conn.commit()
+    conn.close()
+
+def login_user(username, password):
+    conn = sqlite3.connect('users.db')
+    c = conn.cursor()
+    hashed_pw = hashlib.sha256(password.encode()).hexdigest()
+    c.execute('SELECT * FROM user WHERE username = ? AND password = ?', (username, hashed_pw))
+    data = c.fetchone()
+    conn.close()
+    return data
